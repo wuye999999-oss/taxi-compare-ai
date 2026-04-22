@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>价比比 - 商品比价结果</title>
+  <script>document.documentElement.classList.add('js');</script>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --text: #0b0b0b;
+      --muted: #6b7280;
+      --line: #eceef2;
+      --card: #ffffff;
+      --accent: #18a957;
+      --accent-soft: #e9f9f0;
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+      --radius: 20px;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "PingFang SC", "SF Pro Text", "Helvetica Neue", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      min-height: 100vh;
+      padding-bottom: calc(96px + var(--safe-bottom));
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding-top: var(--safe-top);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      background: rgba(255, 255, 255, 0.9);
+      border-bottom: 1px solid rgba(236, 238, 242, 0.9);
+    }
+
+    .topbar-inner {
+      max-width: 520px;
+      margin: 0 auto;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+    }
+
+    .logo {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+    }
+
+    .realtime {
+      font-size: 13px;
+      color: var(--muted);
+      letter-spacing: 0.3px;
+    }
+
+    .container {
+      max-width: 520px;
+      margin: 0 auto;
+      padding: 16px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .summary-strip {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .summary-chip {
+      font-size: 12px;
+      color: #0f172a;
+      background: #f8fafc;
+      border: 1px solid #e9edf3;
+      border-radius: 999px;
+      padding: 6px 10px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+      opacity: 1;
+      transform: translateY(0);
+      transition: opacity 0.55s ease, transform 0.55s ease, box-shadow 0.3s ease;
+    }
+
+    .js .card.reveal {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+
+    .card.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .product-head {
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 14px;
+      align-items: center;
+    }
+
+    .product-image {
+      width: 92px;
+      height: 92px;
+      border-radius: 16px;
+      overflow: hidden;
+      background: linear-gradient(145deg, #f5f7fa, #eff3f8);
+      border: 1px solid #e9edf3;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }
+
+    .product-image img { width: 100%; height: 100%; object-fit: cover; }
+
+    .product-name {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+      line-height: 1.35;
+      letter-spacing: 0.1px;
+    }
+
+    .price-now {
+      margin: 12px 0 4px;
+      font-size: 42px;
+      line-height: 1;
+      font-weight: 740;
+      letter-spacing: -0.5px;
+    }
+
+    .save-hint {
+      margin: 0;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .section-title {
+      margin: 0 0 12px;
+      font-size: 17px;
+      font-weight: 650;
+      letter-spacing: 0.2px;
+    }
+
+    .ai-text-wrap {
+      min-height: 52px;
+      border-radius: 14px;
+      background: #f7f8fa;
+      border: 1px solid #edf0f4;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+    }
+
+    .ai-text {
+      font-size: 16px;
+      font-weight: 550;
+      line-height: 1.45;
+      margin: 0;
+      white-space: pre-wrap;
+      letter-spacing: 0.2px;
+    }
+
+    .caret {
+      width: 9px;
+      height: 1.1em;
+      background: var(--text);
+      display: inline-block;
+      margin-left: 2px;
+      transform: translateY(2px);
+      animation: blink 1s steps(1) infinite;
+    }
+
+    @keyframes blink { 50% { opacity: 0; } }
+
+    .platform-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .platform-item {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+      background: #fff;
+    }
+
+    .platform-item:active {
+      transform: scale(0.995);
+    }
+
+    .platform-item.best {
+      border-color: var(--accent);
+      background: linear-gradient(180deg, #fff, #fcfffd);
+      box-shadow: 0 12px 24px rgba(24, 169, 87, 0.14);
+    }
+
+    .platform-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .platform-name {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 16px;
+      font-weight: 620;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      box-shadow: 0 0 0 2px #fff;
+    }
+
+    .dot.pdd { background: #ff2a40; }
+    .dot.jd { background: #e2231a; }
+    .dot.tb { background: #ff6a00; }
+    .dot.dy { background: #111111; }
+
+    .price-tag {
+      font-size: 24px;
+      font-weight: 720;
+      letter-spacing: -0.2px;
+    }
+
+    .meta-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .diff-note {
+      font-size: 12px;
+      color: var(--muted);
+      margin-left: auto;
+      white-space: nowrap;
+    }
+
+    .diff-high {
+      color: #b42318;
+      font-weight: 600;
+    }
+
+    .badge {
+      font-size: 12px;
+      color: #1f2937;
+      border-radius: 999px;
+      padding: 5px 10px;
+      border: 1px solid #e7eaef;
+      background: #f8fafc;
+      white-space: nowrap;
+    }
+
+    .best .badge {
+      border-color: transparent;
+      background: var(--accent-soft);
+      color: #0c7a3b;
+      font-weight: 600;
+    }
+
+    .btn {
+      appearance: none;
+      border: none;
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 14px;
+      font-weight: 600;
+      background: #111827;
+      color: #fff;
+      transition: transform 0.15s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+      cursor: pointer;
+    }
+
+    .btn:active { transform: scale(0.97); }
+    .btn:hover { opacity: 0.92; }
+    .btn.green {
+      background: linear-gradient(135deg, #15a34a, #16c35d);
+      box-shadow: 0 10px 18px rgba(22, 195, 93, 0.28);
+    }
+
+    .trend-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .trend-stats {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .trend-stats b { color: #111827; }
+
+    .chart-wrap {
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid #eef1f5;
+      background: linear-gradient(180deg, #fafbfd 0%, #ffffff 100%);
+      padding: 10px;
+      overflow: hidden;
+    }
+
+    canvas { width: 100%; height: 180px; display: block; }
+
+    .advice {
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.5;
+      font-weight: 550;
+    }
+
+    .footer-cta {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 110;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-top: 1px solid #eceef2;
+      padding: 10px 14px calc(10px + var(--safe-bottom));
+    }
+
+    .footer-cta-inner {
+      max-width: 520px;
+      margin: 0 auto;
+    }
+
+    .buy-btn {
+      width: 100%;
+      height: 52px;
+      border-radius: 16px;
+      border: none;
+      color: #fff;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      background: linear-gradient(135deg, #18a957 0%, #22c55e 100%);
+      box-shadow: 0 14px 28px rgba(24, 169, 87, 0.35);
+      transition: transform 0.15s ease, box-shadow 0.25s ease;
+      cursor: pointer;
+    }
+
+    .buy-btn:active {
+      transform: scale(0.98);
+      box-shadow: 0 10px 18px rgba(24, 169, 87, 0.25);
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(88px + var(--safe-bottom));
+      transform: translateX(-50%) translateY(16px);
+      min-width: 210px;
+      max-width: 86vw;
+      text-align: center;
+      background: rgba(15, 23, 42, 0.92);
+      color: #fff;
+      font-size: 14px;
+      line-height: 1.3;
+      border-radius: 12px;
+      padding: 12px 14px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.28s ease, transform 0.28s ease;
+      z-index: 200;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .loading-mask {
+      position: fixed;
+      inset: 0;
+      z-index: 300;
+      background: rgba(255, 255, 255, 0.96);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity .35s ease, visibility .35s ease;
+    }
+
+    .loading-mask.hide {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+
+    .loading-box {
+      width: min(88vw, 320px);
+      border: 1px solid #edf1f5;
+      border-radius: 18px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+      background: #fff;
+    }
+
+    .loading-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+
+    .loading-bar {
+      height: 8px;
+      border-radius: 999px;
+      background: #eef2f7;
+      overflow: hidden;
+    }
+
+    .loading-bar > span {
+      display: block;
+      height: 100%;
+      width: 22%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #18a957, #22c55e);
+      animation: loadingMove 1.2s ease-in-out infinite;
+    }
+
+    @keyframes loadingMove {
+      0% { transform: translateX(-120%); }
+      100% { transform: translateX(420%); }
+    }
+
+    @media (min-width: 521px) {
+      body { background: linear-gradient(180deg, #f6f7fb 0%, #f8fafc 60%, #f8fafc 100%); }
+      .container { padding-top: 18px; }
+      .topbar { border-bottom-color: #f0f2f6; }
+      .card { border-color: #eff2f6; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="logo">价比比</div>
+      <div class="realtime">实时比价</div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card reveal">
+      <div class="summary-strip">
+        <span class="summary-chip">当前最低：拼多多 ¥27.9</span>
+        <span class="summary-chip">平台价差最大：¥5.0</span>
+        <span class="summary-chip">均价：¥30.3</span>
+      </div>
+    </section>
+
+    <section class="card reveal">
+      <div class="product-head">
+        <div class="product-image" aria-hidden="true">
+          <img alt="维达抽纸" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop stop-color='%23f5f7fb'/%3E%3Cstop offset='1' stop-color='%23e8edf5'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='200' height='200' rx='26' fill='url(%23g)'/%3E%3Crect x='36' y='44' width='128' height='112' rx='16' fill='%23ffffff' stroke='%23dce3ee'/%3E%3Crect x='58' y='70' width='84' height='58' rx='10' fill='%23f2f6fc'/%3E%3Cpath d='M58 138h84' stroke='%23d5ddea' stroke-width='6' stroke-linecap='round'/%3E%3Ccircle cx='100' cy='99' r='16' fill='%23dce9fb'/%3E%3C/svg%3E" />
+        </div>
+        <div>
+          <h1 class="product-name">维达抽纸 24包 家庭装</h1>
+          <p class="price-now">¥27.9</p>
+          <p class="save-hint">全网最高可省 ¥12</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card reveal">
+      <h2 class="section-title">AI建议</h2>
+      <div class="ai-text-wrap">
+        <p class="ai-text" id="aiText" aria-live="polite"></p>
+      </div>
+    </section>
+
+    <section class="card reveal">
+      <h2 class="section-title">平台价格对比</h2>
+      <div class="platform-list">
+        <article class="platform-item best">
+          <div class="platform-top">
+            <div class="platform-name"><span class="dot pdd"></span>拼多多（推荐）</div>
+            <div class="price-tag">¥27.9</div>
+          </div>
+          <div class="meta-row">
+            <span class="badge">最低价</span>
+            <span class="diff-note">对比最低基准</span>
+            <button class="btn green" data-platform="拼多多">去省钱</button>
+          </div>
+        </article>
+
+        <article class="platform-item">
+          <div class="platform-top">
+            <div class="platform-name"><span class="dot jd"></span>京东</div>
+            <div class="price-tag">¥32.9</div>
+          </div>
+          <div class="meta-row">
+            <span class="badge">次日达</span>
+            <span class="diff-note diff-high">贵 ¥5.0（+17.9%）</span>
+            <button class="btn" data-platform="京东">去看看</button>
+          </div>
+        </article>
+
+        <article class="platform-item">
+          <div class="platform-top">
+            <div class="platform-name"><span class="dot tb"></span>淘宝</div>
+            <div class="price-tag">¥30.5</div>
+          </div>
+          <div class="meta-row">
+            <span class="badge">店铺券</span>
+            <span class="diff-note diff-high">贵 ¥2.6（+9.3%）</span>
+            <button class="btn" data-platform="淘宝">去看看</button>
+          </div>
+        </article>
+
+        <article class="platform-item">
+          <div class="platform-top">
+            <div class="platform-name"><span class="dot dy"></span>抖音</div>
+            <div class="price-tag">¥29.8</div>
+          </div>
+          <div class="meta-row">
+            <span class="badge">直播价</span>
+            <span class="diff-note diff-high">贵 ¥1.9（+6.8%）</span>
+            <button class="btn" data-platform="抖音">去看看</button>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="card reveal">
+      <div class="trend-head">
+        <h2 class="section-title" style="margin:0;">30天价格趋势</h2>
+      </div>
+      <div class="trend-stats">
+        <span>历史最低 <b>¥24.9</b></span>
+        <span>当前偏高 <b>18%</b></span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="trendChart" width="600" height="260" aria-label="最近30天价格趋势图"></canvas>
+      </div>
+    </section>
+
+    <section class="card reveal">
+      <h2 class="section-title">购买建议</h2>
+      <p class="advice">如果购买2件，预计再省 ¥6</p>
+    </section>
+  </main>
+
+  <div class="footer-cta">
+    <div class="footer-cta-inner">
+      <button class="buy-btn" id="buyNow">立即购买最低价</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">正在跳转拼多多...</div>
+  <div class="loading-mask" id="loadingMask" aria-live="polite">
+    <div class="loading-box">
+      <div class="loading-title">正在加载平台价差与实时优惠...</div>
+      <div class="loading-bar"><span></span></div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const aiMessages = [
+        '建议今晚8点购买，预计降至 ¥25.9',
+        '拼多多当前最低，适合立即下单'
+      ];
+
+      const aiText = document.getElementById('aiText');
+      const toast = document.getElementById('toast');
+      const loadingMask = document.getElementById('loadingMask');
+      const buttons = Array.from(document.querySelectorAll('.btn, #buyNow'));
+
+      function pressFeedback(btn) {
+        btn.animate(
+          [
+            { transform: 'scale(1)' },
+            { transform: 'scale(0.965)' },
+            { transform: 'scale(1)' }
+          ],
+          { duration: 180, easing: 'ease-out' }
+        );
+      }
+
+      function showToast(message) {
+        toast.textContent = message;
+        toast.classList.add('show');
+        clearTimeout(showToast.timer);
+        showToast.timer = setTimeout(() => toast.classList.remove('show'), 1600);
+      }
+
+      buttons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          pressFeedback(btn);
+          const platform = btn.dataset.platform || '拼多多';
+          showToast(`正在跳转${platform}...`);
+        });
+      });
+
+      let msgIndex = 0;
+      let charIndex = 0;
+      let deleting = false;
+
+      function typeLoop() {
+        const current = aiMessages[msgIndex];
+
+        if (!deleting) {
+          charIndex++;
+          if (charIndex >= current.length) {
+            deleting = true;
+            setTimeout(typeLoop, 1350);
+            aiText.innerHTML = `${current}<span class="caret"></span>`;
+            return;
+          }
+        } else {
+          charIndex--;
+          if (charIndex <= 0) {
+            deleting = false;
+            msgIndex = (msgIndex + 1) % aiMessages.length;
+          }
+        }
+
+        const visible = current.slice(0, Math.max(0, charIndex));
+        aiText.innerHTML = `${visible}<span class="caret"></span>`;
+        setTimeout(typeLoop, deleting ? 40 : 65);
+      }
+      typeLoop();
+
+      const reveals = document.querySelectorAll('.reveal');
+      if ('IntersectionObserver' in window) {
+        const io = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) {
+                entry.target.classList.add('visible');
+                io.unobserve(entry.target);
+              }
+            });
+          },
+          { threshold: 0.14, rootMargin: '0px 0px -30px 0px' }
+        );
+        reveals.forEach((el) => io.observe(el));
+      } else {
+        reveals.forEach((el) => el.classList.add('visible'));
+      }
+
+      const canvas = document.getElementById('trendChart');
+      const ctx = canvas.getContext('2d');
+      const prices = [31.8, 31.2, 30.9, 30.6, 30.2, 29.8, 29.9, 30.4, 30.1, 29.5, 29.2, 28.9, 29.1, 28.6, 28.2, 27.8, 28.1, 27.9, 27.6, 27.2, 26.9, 26.5, 26.8, 26.1, 25.8, 25.2, 24.9, 25.5, 26.4, 27.9];
+
+      function drawChart() {
+        const dpr = window.devicePixelRatio || 1;
+        const cssWidth = canvas.clientWidth;
+        const cssHeight = canvas.clientHeight;
+        canvas.width = Math.floor(cssWidth * dpr);
+        canvas.height = Math.floor(cssHeight * dpr);
+
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+        const pad = { top: 18, right: 10, bottom: 20, left: 6 };
+        const w = cssWidth - pad.left - pad.right;
+        const h = cssHeight - pad.top - pad.bottom;
+
+        const min = Math.min(...prices) - 0.4;
+        const max = Math.max(...prices) + 0.4;
+
+        const x = (i) => pad.left + (i / (prices.length - 1)) * w;
+        const y = (v) => pad.top + ((max - v) / (max - min)) * h;
+
+        ctx.strokeStyle = 'rgba(16, 24, 40, 0.08)';
+        ctx.lineWidth = 1;
+        [0.25, 0.5, 0.75].forEach((r) => {
+          const gy = pad.top + h * r;
+          ctx.beginPath();
+          ctx.moveTo(pad.left, gy);
+          ctx.lineTo(pad.left + w, gy);
+          ctx.stroke();
+        });
+
+        const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + h);
+        grad.addColorStop(0, 'rgba(24, 169, 87, 0.23)');
+        grad.addColorStop(1, 'rgba(24, 169, 87, 0.02)');
+
+        ctx.beginPath();
+        prices.forEach((v, i) => {
+          const px = x(i);
+          const py = y(v);
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        });
+        ctx.lineTo(x(prices.length - 1), pad.top + h);
+        ctx.lineTo(x(0), pad.top + h);
+        ctx.closePath();
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        ctx.beginPath();
+        prices.forEach((v, i) => {
+          const px = x(i);
+          const py = y(v);
+          if (i === 0) ctx.moveTo(px, py);
+          else {
+            const prevX = x(i - 1);
+            const cpx = (prevX + px) / 2;
+            const prevY = y(prices[i - 1]);
+            ctx.quadraticCurveTo(cpx, prevY, px, py);
+          }
+        });
+
+        ctx.strokeStyle = '#18a957';
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+
+        const currentIdx = prices.length - 1;
+        const curX = x(currentIdx);
+        const curY = y(prices[currentIdx]);
+
+        ctx.beginPath();
+        ctx.arc(curX, curY, 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#18a957';
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(curX, curY, 9, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(24, 169, 87, 0.17)';
+        ctx.fill();
+      }
+
+      drawChart();
+      window.addEventListener('resize', drawChart, { passive: true });
+
+      window.addEventListener('load', () => {
+        setTimeout(() => loadingMask.classList.add('hide'), 520);
+      });
+    })();
+  </script>
+</body>
+</html>
