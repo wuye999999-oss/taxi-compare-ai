@@ -1,5 +1,6 @@
 // server-clean.js: clean, first-principles Jiabibi API runtime.
 // Real provider data only. Secrets must live in environment variables, never in GitHub.
+// Conflict resolution note: keep this as the canonical Render runtime and preserve /api/compare compatibility.
 
 import http from 'node:http';
 import https from 'node:https';
@@ -519,7 +520,7 @@ async function handle(req, res) {
     if (url.pathname === '/api/tb/item' || url.pathname === '/api/tb/link') { const input = body.item_id || body.num_iid || body.id || body.url || body.material_url || url.searchParams.get('item_id') || url.searchParams.get('num_iid') || url.searchParams.get('id') || url.searchParams.get('url') || ''; return sendJson(res, 200, await tbItem(input)); }
     if (url.pathname === '/api/pdd/link') return sendJson(res, 200, await pddLink({ ...body, goods_sign: body.goods_sign || url.searchParams.get('goods_sign'), goods_id: body.goods_id || url.searchParams.get('goods_id') }));
     if (url.pathname === '/api/jd/link') return sendJson(res, 200, await jdLink({ ...body, sku_id: body.sku_id || url.searchParams.get('sku_id'), material_url: body.material_url || url.searchParams.get('material_url') }));
-    if (url.pathname === '/api/search' || url.pathname === '/api/search.json' || url.pathname === '/api/provider/search') {
+    if (url.pathname === '/api/search' || url.pathname === '/api/compare' || url.pathname === '/api/search.json' || url.pathname === '/api/provider/search') {
       if (!q) return sendJson(res, 400, { ok: false, error: 'missing_keyword', message: '请加 ?q=关键词' });
       let result;
       if (platform === 'tb') result = await searchTb(q);
