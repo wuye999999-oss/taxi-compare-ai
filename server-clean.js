@@ -276,7 +276,7 @@ const DOUYIN_CONFIGURED = !!(DOUYIN_APP_ID && DOUYIN_USER_ID && DOUYIN_ROLE_ID &
 const DOUYIN_SIGN_MODES = ['official_wrap_sorted', 'sorted_then_secret', 'secret_then_sorted', 'no_wrap_sorted', 'body_after_sorted_wrap'];
 const DOUYIN_RETRY_SIGN_MODES = ['official_wrap_sorted', 'sorted_then_secret', 'secret_then_sorted', 'body_after_sorted_wrap'];
 function douyinSafeNum(v) { const n = Number(v); return Number.isFinite(n) && String(v).trim() !== '' ? n : String(v || ''); }
-function stableJsonStringify(obj) {
+export function stableJsonStringify(obj) {
   if (Array.isArray(obj)) return '[' + obj.map(item => stableJsonStringify(item)).join(',') + ']';
   if (obj && typeof obj === 'object') {
     const entries = Object.keys(obj).sort().filter(k => obj[k] !== undefined).map(k => JSON.stringify(k) + ':' + stableJsonStringify(obj[k]));
@@ -299,7 +299,7 @@ function douyinSignInput(basePayload, mode = DOUYIN_SIGN_MODE) {
   else signBody = DOUYIN_SECURITY_KEY + sorted + DOUYIN_SECURITY_KEY;
   return { mode: normalizedMode, signBody, signedKeys: normalizedMode === 'body_after_sorted_wrap' ? sortedWithoutDataKeys.concat(['data']) : sortedKeys };
 }
-function buildDouyinPayload(path, data, options = {}) {
+export function buildDouyinPayload(path, data, options = {}) {
   const dataObj = { user_id: douyinSafeNum(DOUYIN_USER_ID), role_id: douyinSafeNum(DOUYIN_ROLE_ID), ...(data || {}) };
   const dataStr = stableJsonStringify(dataObj);
   const basePayload = {
@@ -325,7 +325,7 @@ function safeDouyinSignDebug(payload, dataStr, mode, signedKeys) {
     payload_hash: sha256Hex(JSON.stringify({ ...payload, sign: payload.sign ? `${String(payload.sign).slice(0, 6)}...${String(payload.sign).slice(-6)}` : '' }))
   };
 }
-function douyinSelfCheck() {
+export function douyinSelfCheck() {
   return {
     ok: true,
     platform: 'douyin',
@@ -359,7 +359,7 @@ async function douyinRequestOnce(path, data = {}, mode = DOUYIN_SIGN_MODE) {
   };
   return raw;
 }
-async function douyinRequest(path, data = {}) {
+export async function douyinRequest(path, data = {}) {
   if (!DOUYIN_ENABLED) return { code: -1, desc: 'douyin_disabled', data: null, __request_meta: { path, signed: false, secret_sent_to_client: false } };
   if (!DOUYIN_CONFIGURED) return { code: -1, desc: 'missing_douyin_env', data: douyinSelfCheck(), __request_meta: { path, signed: false, secret_sent_to_client: false } };
   const modes = [DOUYIN_SIGN_MODE, ...DOUYIN_RETRY_SIGN_MODES].filter((x, i, a) => x && a.indexOf(x) === i);
@@ -414,7 +414,7 @@ function normalizeDouyinProduct(p, source = 'douyin.cps.product.search') {
     product_ext: p.ext || p.product_ext || '', commission_ratio: p.cos_ratio || p.public_plan_cos_ratio || 0, commission_fee_yuan: yuanFromFen(p.cos_fee || 0), raw: p
   };
 }
-async function searchDouyin(q, page = 1, pageSize = 20) {
+export async function searchDouyin(q, page = 1, pageSize = 20) {
   if (!DOUYIN_ENABLED || !DOUYIN_CONFIGURED) return { ok: false, platform: 'douyin', source: 'douyin.cps', keyword: q, total_count: 0, goods_list: [], error: !DOUYIN_ENABLED ? 'douyin_disabled' : 'missing_douyin_env', self_check: douyinSelfCheck() };
   const raw = await douyinRequest(DOUYIN_PRODUCT_SEARCH_PATH, { page: Number(page) || 1, page_size: Math.min(Math.max(Number(pageSize) || 20, 1), 20), title: q });
   const data = douyinPayloadData(raw);
@@ -485,7 +485,7 @@ function providerStatus() {
     { platform: 'douyin', name: '抖音', configured: DOUYIN_CONFIGURED, enabled: DOUYIN_ENABLED, search: DOUYIN_ENABLED && DOUYIN_CONFIGURED, link: DOUYIN_ENABLED && DOUYIN_CONFIGURED, source: 'pangolin.ecom.cps', app_id_present: !!DOUYIN_APP_ID, user_id_present: !!DOUYIN_USER_ID, role_id_present: !!DOUYIN_ROLE_ID, security_key_present: !!DOUYIN_SECURITY_KEY, secret_masked: DOUYIN_SECURITY_KEY ? DOUYIN_SECURITY_KEY.slice(0, 3) + '***' + DOUYIN_SECURITY_KEY.slice(-3) : '', sign_mode: DOUYIN_SIGN_MODE, product_search_path: DOUYIN_PRODUCT_SEARCH_PATH, product_link_path: DOUYIN_PRODUCT_LINK_PATH, notice: DOUYIN_CONFIGURED ? '抖音CPS真实接口已配置' : '抖音CPS环境变量未配置' }
   ];
 }
-function health() {
+export function health() {
   return {
     ok: true,
     name: '价比比 API clean',
@@ -542,4 +542,14 @@ async function handle(req, res) {
     return sendJson(res, 500, { ok: false, error: 'server_error', message: e.message || String(e), stack: process.env.NODE_ENV === 'production' ? undefined : e.stack });
   }
 }
-http.createServer(handle).listen(PORT, () => console.log('Jiabibi clean API listening on', PORT));
+export function createServer() {
+  return http.createServer(handle);
+}
+export function startServer(port = PORT) {
+  const server = createServer();
+  server.listen(port, () => console.log('Jiabibi clean API listening on', port));
+  return server;
+}
+if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+  startServer();
+}
