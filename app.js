@@ -3,6 +3,7 @@ import { buildPriceModel } from './matcher.js';
 import { forceCustomerPlatforms, loadProviderStatus, normalizeGoods, searchAllPlatforms } from './providers.js';
 import { renderDebug } from './debug.js';
 import { priceOf, yuan } from './unit-price.js';
+import { SandboxSession, STATUS_LABELS } from './sandbox.js';
 
 const API = 'https://jiabibi-api.onrender.com';
 const $ = id => document.getElementById(id);
@@ -16,6 +17,11 @@ const groupHint = {
 let goodsMap = {};
 let providerMap = {};
 let lastKeyword = '';
+
+// ── Sandbox state ──────────────────────────────────────────────────────────
+let sandboxSession = null;
+let sandboxEnabled = false;
+let lastSandboxItems = [];   // Most recent sandbox-scraped items
 
 function providerOk(provider, count) {
   return Boolean(provider?.configured || provider?.search || provider?.link || provider?.ok || count);
@@ -34,6 +40,13 @@ function buyButton(item) {
   return item ? `<button class="buy" data-key="${item._key}">去购买</button>` : '<button class="buy" disabled>去购买</button>';
 }
 
+function sourceBadge(item) {
+  if (!item) return '';
+  return item.source === 'sandbox'
+    ? '<span class="sandbox-badge">沙盒验价</span>'
+    : '';
+}
+
 function platformSnapshot(group) {
   return `<div class="mini-platforms">${forceCustomerPlatforms().map(id => {
     const c = group.byPlatform[id];
@@ -44,7 +57,24 @@ function platformSnapshot(group) {
 function groupCard(type, group) {
   const c = group.best;
   const item = c?.item;
-  return `<section class="card result-card"><div class="head"><div><div class="type">${groupHint[type]}</div><h2>${RESULT_GROUPS.find(([id]) => id === type)[1]}</h2></div><span class="badge">${item ? platformName(item.platform) : '暂无'}</span></div>${item ? `<div class="price"><small>¥</small>${yuan(priceOf(item))}</div><p class="source">${platformName(item.platform)} · ${item.shop_name || item.brand_name || '未知店铺'}<br>${item.goods_name || ''}</p>${c.spec.text ? `<div class="spec">${c.spec.text}</div>` : ''}` : '<div class="price"><small>¥</small>--</div><p class="source">暂未返回可靠同品商品。</p>'}${buyButton(item)}${platformSnapshot(group)}</section>`;
+  return `<section class="card result-card"><div class="head"><div><div class="type">${groupHint[type]}</div><h2>${RESULT_GROUPS.find(([id]) => id === type)[1]}</h2></div><span class="badge">${item ? platformName(item.platform) : '暂无'}${sourceBadge(item)}</span></div>${item ? `<div class="price"><small>¥</small>${yuan(priceOf(item))}</div><p class="source">${platformName(item.platform)} · ${item.shop_name || item.brand_name || '未知店铺'}<br>${item.goods_name || ''}</p>${c.spec.text ? `<div class="spec">${c.spec.text}</div>` : ''}` : '<div class="price"><small>¥</small>--</div><p class="source">暂未返回可靠同品商品。</p>'}${buyButton(item)}${platformSnapshot(group)}</section>`;
+}
+
+// Merges sandbox items + API items into a single goods_list, sandbox wins on overlap
+function mergeForPipeline(sandboxItems, apiData) {
+  const apiItems = apiData?.goods_list || [];
+  const seen = new Set();
+  const merged = [];
+
+  for (const item of [...sandboxItems, ...apiItems]) {
+    const nameKey = (item.goods_name || '').slice(0, 20).toLowerCase().replace(/\s+/g, '');
+    const key = `${item.platform}:${nameKey}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(item);
+    }
+  }
+  return { goods_list: merged };
 }
 
 function render(data, keyword) {
@@ -64,10 +94,20 @@ async function search(keyword) {
   $('keyword').value = q;
   $('status').textContent = '正在做同品校验和单位价比价...';
   $('summary').innerHTML = renderProviderStatus([]) + '<div class="empty">加载中...</div>';
+
+  // If sandbox is active, kick off sandbox search first (fire-and-forget)
+  if (sandboxEnabled && sandboxSession) {
+    setSandboxPlatformStatus({ jd: 'sandbox_searching', pdd: 'sandbox_searching' });
+    sandboxSession.search(q).catch(() => {});
+  }
+
   try {
-    const data = await searchAllPlatforms(API, q);
-    render(data, q);
-    $('status').textContent = '已固定查询拼多多、京东、淘宝、抖音；先过滤错品，再按单位价排序。';
+    const apiData = await searchAllPlatforms(API, q);
+    const mergedData = mergeForPipeline(lastSandboxItems, apiData);
+    render(mergedData, q);
+    $('status').textContent = sandboxEnabled
+      ? '已合并沙盒验价与 API 数据；先过滤错品，再按单位价排序。'
+      : '已固定查询拼多多、京东、淘宝、抖音；先过滤错品，再按单位价排序。';
   } catch (error) {
     $('summary').innerHTML = renderProviderStatus([]) + `<div class="empty">搜索失败：${error.message}</div>`;
     $('status').textContent = '查询失败';
@@ -103,9 +143,97 @@ async function buy(item) {
   }
 }
 
+// ── Sandbox UI helpers ──────────────────────────────────────────────────────
+
+const SANDBOX_PLATFORM_LABELS = { jd: '京东', pdd: '拼多多', tb: '淘宝', douyin: '抖音' };
+
+function setSandboxPlatformStatus(statuses) {
+  const container = $('sbPlatforms');
+  if (!container) return;
+  const all = { jd: 'unsupported', pdd: 'unsupported', tb: 'unsupported', douyin: 'unsupported', ...statuses };
+  container.innerHTML = Object.entries(all).map(([platform, status]) =>
+    `<div class="sb-plat"><b>${SANDBOX_PLATFORM_LABELS[platform] || platform}</b><span class="sb-status-${status}">${STATUS_LABELS[status] || status}</span></div>`
+  ).join('');
+}
+
+function showSandboxPanel(show) {
+  $('sandboxPanel').classList.toggle('show', show);
+}
+
+async function openSandboxSession() {
+  if (sandboxSession) await sandboxSession.close();
+  sandboxSession = new SandboxSession();
+
+  sandboxSession
+    .on('created', data => {
+      const statuses = {};
+      for (const [k, v] of Object.entries(data.platforms)) statuses[k] = v.status;
+      setSandboxPlatformStatus(statuses);
+    })
+    .on('status', data => {
+      setSandboxPlatformStatus(data.platformStatus || {});
+      if (data.results?.length) {
+        lastSandboxItems = data.results;
+      }
+    })
+    .on('done', ({ results, platformStatus }) => {
+      setSandboxPlatformStatus(platformStatus || {});
+      lastSandboxItems = results || [];
+      // Re-render with sandbox results merged if we have a keyword
+      if (lastKeyword && lastSandboxItems.length) {
+        $('status').textContent = '沙盒验价完成，正在重新合并比价...';
+        search(lastKeyword);
+      }
+    });
+
+  try {
+    await sandboxSession.create();
+    showSandboxPanel(true);
+    sandboxEnabled = true;
+    $('sandboxToggleBtn').classList.add('active');
+    $('sandboxToggleBtn').textContent = '✓ 沙盒验价已启用';
+    $('status').textContent = '沙盒验价已启用。请发起比价，京东和拼多多将同时进行网页搜索。';
+  } catch (_err) {
+    $('status').textContent = '沙盒服务不可用（请先启动本地 sandbox server）';
+    sandboxEnabled = false;
+    showSandboxPanel(false);
+  }
+}
+
+async function closeSandboxSession() {
+  if (sandboxSession) {
+    await sandboxSession.close();
+    sandboxSession = null;
+  }
+  sandboxEnabled = false;
+  lastSandboxItems = [];
+  showSandboxPanel(false);
+  $('sandboxToggleBtn').classList.remove('active');
+  $('sandboxToggleBtn').textContent = '🔍 真实沙盒验价 Beta';
+  $('status').textContent = '沙盒验价已关闭。';
+}
+
+// ── Init ────────────────────────────────────────────────────────────────────
+
 async function init() {
   $('form').onsubmit = event => { event.preventDefault(); search(); };
   $('debugToggle').onclick = () => $('debug').classList.toggle('show');
+
+  // Sandbox modal
+  $('sandboxToggleBtn').onclick = () => {
+    if (sandboxEnabled) {
+      closeSandboxSession();
+    } else {
+      $('sandboxModal').classList.remove('hidden');
+    }
+  };
+  $('sandboxModalCancel').onclick = () => $('sandboxModal').classList.add('hidden');
+  $('sandboxModalConfirm').onclick = () => {
+    $('sandboxModal').classList.add('hidden');
+    openSandboxSession();
+  };
+  $('sandboxCloseBtn').onclick = () => closeSandboxSession();
+
   $('summary').innerHTML = renderProviderStatus([]);
   try {
     providerMap = await loadProviderStatus(API);

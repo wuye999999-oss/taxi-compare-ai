@@ -5,7 +5,46 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>价比比</title>
   <style>
-    :root{--card:#fff;--muted:#86868b;--line:#e8e8ed;--blue:#0071e3;--shadow:0 16px 48px rgba(0,0,0,.07)}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#fff,#f5f5f7 48%,#eee);font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;color:#111}button,input{font:inherit}.app{max-width:860px;margin:0 auto;padding:24px 16px 46px}.hero{text-align:center;padding:34px 0 18px}.logo{font-size:54px;font-weight:950;letter-spacing:-2px;margin:0}.sub{color:var(--muted);font-size:16px;line-height:1.5;margin:8px auto 0}.search{display:flex;gap:8px;background:#fff;border-radius:28px;padding:10px;box-shadow:var(--shadow);margin:24px auto 18px;max-width:680px}.search input{flex:1;border:1px solid var(--line);border-radius:20px;padding:15px 16px;font-size:17px;outline:0}.search button,.buy{border:0;background:#111;color:#fff;border-radius:20px;padding:0 22px;font-weight:900}.status{text-align:center;color:var(--muted);font-size:13px;margin:8px 0 14px}.grid{display:grid;gap:14px}.card,.empty{background:var(--card);border:1px solid rgba(255,255,255,.85);box-shadow:var(--shadow);border-radius:28px;padding:20px;margin:0}.head{display:flex;justify-content:space-between;gap:12px}.type{font-size:14px;color:var(--muted);font-weight:800}.result-card h2{font-size:25px;font-weight:950;margin:4px 0 0}.badge{border-radius:999px;background:#f2f2f7;color:#555;font-size:12px;font-weight:900;padding:6px 10px;height:max-content}.price{font-size:52px;font-weight:950;letter-spacing:-1.5px;margin:18px 0 8px}.price small{font-size:21px}.source{color:var(--muted);font-size:14px;line-height:1.45}.spec{display:inline-block;background:#f5f5f7;border:1px solid var(--line);border-radius:14px;padding:7px 10px;margin-top:10px;color:#555;font-size:13px;font-weight:800}.buy{margin-top:14px;background:var(--blue);padding:12px 18px}.buy:disabled{background:#d1d1d6}.platforms,.mini-platforms{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}.platform,.mini{border:1px solid var(--line);border-radius:16px;text-align:center;padding:10px;background:#fff}.platform b,.mini b{display:block}.platform span,.mini span{display:block;font-size:12px;color:var(--muted);margin-top:4px}.mini small{display:block;color:#86868b;font-size:11px;margin-top:3px}.ok{color:#14813f!important}.warn{color:#ad6800!important}.empty{text-align:center;color:var(--muted);line-height:1.6}.debug-button{display:block;margin:18px auto 0;border:0;background:transparent;color:#86868b}.debug{display:none;margin-top:14px}.debug.show{display:block}.debug-tools{background:#fff;border-radius:20px;padding:14px}.debug-row{border-top:1px solid var(--line);padding:10px 0;font-size:12px;color:#555}.debug-row.drop b{color:#b00020}.debug-row.keep b{color:#14813f}@media(max-width:560px){.logo{font-size:44px}.platforms,.mini-platforms{grid-template-columns:repeat(2,1fr)}.price{font-size:44px}.search button{padding:0 18px}.app{padding-top:18px}}
+    :root{--card:#fff;--muted:#86868b;--line:#e8e8ed;--blue:#0071e3;--shadow:0 16px 48px rgba(0,0,0,.07);--green:#14813f;--amber:#ad6800;--red:#b00020}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#fff,#f5f5f7 48%,#eee);font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;color:#111}button,input{font:inherit}.app{max-width:860px;margin:0 auto;padding:24px 16px 46px}.hero{text-align:center;padding:34px 0 18px}.logo{font-size:54px;font-weight:950;letter-spacing:-2px;margin:0}.sub{color:var(--muted);font-size:16px;line-height:1.5;margin:8px auto 0}.search{display:flex;gap:8px;background:#fff;border-radius:28px;padding:10px;box-shadow:var(--shadow);margin:24px auto 18px;max-width:680px}.search input{flex:1;border:1px solid var(--line);border-radius:20px;padding:15px 16px;font-size:17px;outline:0}.search button,.buy{border:0;background:#111;color:#fff;border-radius:20px;padding:0 22px;font-weight:900}.status{text-align:center;color:var(--muted);font-size:13px;margin:8px 0 14px}.grid{display:grid;gap:14px}.card,.empty{background:var(--card);border:1px solid rgba(255,255,255,.85);box-shadow:var(--shadow);border-radius:28px;padding:20px;margin:0}.head{display:flex;justify-content:space-between;gap:12px}.type{font-size:14px;color:var(--muted);font-weight:800}.result-card h2{font-size:25px;font-weight:950;margin:4px 0 0}.badge{border-radius:999px;background:#f2f2f7;color:#555;font-size:12px;font-weight:900;padding:6px 10px;height:max-content}.sandbox-badge{border-radius:999px;background:#fff3cd;color:#856404;font-size:11px;font-weight:900;padding:3px 8px;display:inline-block;margin-left:6px}.price{font-size:52px;font-weight:950;letter-spacing:-1.5px;margin:18px 0 8px}.price small{font-size:21px}.source{color:var(--muted);font-size:14px;line-height:1.45}.spec{display:inline-block;background:#f5f5f7;border:1px solid var(--line);border-radius:14px;padding:7px 10px;margin-top:10px;color:#555;font-size:13px;font-weight:800}.buy{margin-top:14px;background:var(--blue);padding:12px 18px}.buy:disabled{background:#d1d1d6}.platforms,.mini-platforms{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}.platform,.mini{border:1px solid var(--line);border-radius:16px;text-align:center;padding:10px;background:#fff}.platform b,.mini b{display:block}.platform span,.mini span{display:block;font-size:12px;color:var(--muted);margin-top:4px}.mini small{display:block;color:#86868b;font-size:11px;margin-top:3px}.ok{color:var(--green)!important}.warn{color:var(--amber)!important}.empty{text-align:center;color:var(--muted);line-height:1.6}.debug-button{display:block;margin:18px auto 0;border:0;background:transparent;color:#86868b}.debug{display:none;margin-top:14px}.debug.show{display:block}.debug-tools{background:#fff;border-radius:20px;padding:14px}.debug-row{border-top:1px solid var(--line);padding:10px 0;font-size:12px;color:#555}.debug-row.drop b{color:var(--red)}.debug-row.keep b{color:var(--green)}
+
+    /* ── Sandbox UI ───────────────────────────────────────────── */
+    .sandbox-entry{text-align:center;margin:6px 0 18px}
+    .sandbox-entry button{border:1px solid var(--line);background:#fff;color:#333;border-radius:999px;padding:8px 20px;font-size:13px;font-weight:700;cursor:pointer;transition:background .15s}
+    .sandbox-entry button:hover{background:#f5f5f7}
+    .sandbox-entry button.active{background:#111;color:#fff;border-color:#111}
+
+    /* Modal overlay */
+    .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px}
+    .modal-bg.hidden{display:none}
+    .modal{background:#fff;border-radius:24px;padding:28px 24px 24px;max-width:480px;width:100%;box-shadow:0 32px 80px rgba(0,0,0,.18)}
+    .modal h3{margin:0 0 12px;font-size:20px;font-weight:950}
+    .modal p,.modal li{font-size:14px;color:#444;line-height:1.6;margin:6px 0}
+    .modal ul{padding-left:20px;margin:8px 0 16px}
+    .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+    .modal-actions button{border:0;border-radius:14px;padding:10px 22px;font-weight:800;font-size:14px;cursor:pointer}
+    .btn-cancel{background:#f2f2f7;color:#333}
+    .btn-confirm{background:#111;color:#fff}
+
+    /* Sandbox status panel */
+    .sandbox-panel{background:#fff;border:1px solid var(--line);border-radius:20px;padding:16px 18px;margin-bottom:14px;display:none}
+    .sandbox-panel.show{display:block}
+    .sandbox-panel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+    .sandbox-panel-head h4{margin:0;font-size:15px;font-weight:900}
+    .sandbox-close-btn{border:0;background:transparent;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:2px 6px}
+    .sb-platforms{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+    .sb-plat{border:1px solid var(--line);border-radius:14px;text-align:center;padding:10px 6px;background:#fafafa}
+    .sb-plat b{display:block;font-size:13px}
+    .sb-plat span{display:block;font-size:11px;margin-top:4px;font-weight:700}
+    .sb-status-api_ok{color:var(--green)}
+    .sb-status-sandbox_pending{color:var(--muted)}
+    .sb-status-sandbox_searching{color:var(--amber)}
+    .sb-status-sandbox_success{color:var(--green)}
+    .sb-status-sandbox_manual_verify{color:var(--red)}
+    .sb-status-sandbox_failed_fallback{color:var(--amber)}
+    .sb-status-unsupported{color:#ccc}
+    .sandbox-note{font-size:12px;color:var(--muted);margin-top:10px;text-align:center}
+
+    @media(max-width:560px){.logo{font-size:44px}.platforms,.mini-platforms,.sb-platforms{grid-template-columns:repeat(2,1fr)}.price{font-size:44px}.search button{padding:0 18px}.app{padding-top:18px}}
   </style>
 </head>
 <body>
@@ -15,11 +54,51 @@
       <p class="sub">输入商品，自动比较不同平台的真实价格。</p>
       <form id="form" class="search"><input id="keyword" placeholder="输入商品名或粘贴商品链接"><button>比价</button></form>
     </section>
+
+    <!-- Sandbox entry -->
+    <div class="sandbox-entry">
+      <button id="sandboxToggleBtn" type="button">🔍 真实沙盒验价 Beta</button>
+    </div>
+
     <div id="status" class="status">正在读取平台状态...</div>
+
+    <!-- Sandbox status panel (shown when session is active) -->
+    <div id="sandboxPanel" class="sandbox-panel">
+      <div class="sandbox-panel-head">
+        <h4>沙盒验价状态</h4>
+        <button id="sandboxCloseBtn" class="sandbox-close-btn" type="button" title="关闭沙盒">×</button>
+      </div>
+      <div class="sb-platforms" id="sbPlatforms"></div>
+      <p class="sandbox-note" id="sandboxNote">会话 30 分钟后自动销毁，不保留任何 Cookie 和账号信息。</p>
+    </div>
+
     <main id="summary" class="grid"></main>
     <button id="debugToggle" class="debug-button" type="button">显示调试工具</button>
     <section id="debug" class="debug"></section>
   </div>
+
+  <!-- Risk-disclosure modal -->
+  <div id="sandboxModal" class="modal-bg hidden">
+    <div class="modal">
+      <h3>🔍 真实沙盒验价 Beta</h3>
+      <p>沙盒验价会向京东、拼多多发起<strong>一次性</strong>网页搜索请求，取得更贴近用户视角的实时价格，并与 API 数据合并比较。</p>
+      <p><strong>授权说明与安全边界：</strong></p>
+      <ul>
+        <li>不收集您的平台账号或密码</li>
+        <li>不长期保存 Cookie（会话 30 分钟后自动销毁）</li>
+        <li>不绕过验证码或滑块</li>
+        <li>不读取订单、地址、手机号等隐私数据</li>
+        <li>淘宝、抖音当前未接入，不会伪造结果</li>
+        <li>沙盒失败时自动回退至 API 数据</li>
+      </ul>
+      <p>沙盒验价为<strong>用户主动发起的一次性查询</strong>，仅用于商品验价。</p>
+      <div class="modal-actions">
+        <button class="btn-cancel" id="sandboxModalCancel">取消</button>
+        <button class="btn-confirm" id="sandboxModalConfirm">我已了解，开启沙盒</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="./app.js"></script>
 </body>
 </html>
