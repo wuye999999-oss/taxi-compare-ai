@@ -18,7 +18,7 @@ export function normalizeGoods(data = {}) {
 export function normalizeProviderStatus(data = {}) {
   const map = {};
   for (const provider of data.providers || []) {
-    map[canonPlatform(provider.platform)] = provider;
+    map[canonPlatform(provider.platform || provider.provider)] = provider;
   }
   return map;
 }
@@ -33,6 +33,6 @@ export async function loadProviderStatus(apiBase, fetcher = fetch) {
 }
 
 export async function searchAllPlatforms(apiBase, keyword, fetcher = fetch) {
-  const params = new URLSearchParams({ platform: 'all', page_size: '50', keyword });
-  return fetcher(`${apiBase}/api/search?${params.toString()}`, { cache: 'no-store' }).then(res => res.json());
+  const params = new URLSearchParams({ q: keyword });
+  return fetcher(`${apiBase}/api/compare?${params.toString()}`, { cache: 'no-store' }).then(res => res.json());
 }
