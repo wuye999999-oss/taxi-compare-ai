@@ -1,1 +1,10 @@
-{"name":"jiabibi-api","version":"1.0.0","description":"Jiabibi API backend","main":"server-clean.js","scripts":{"start":"node server-clean.js"},"engines":{"node":">=18 <23"},"dependencies":{}}
+{
+  "name": "jiabibi-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "start": "node server-clean.js",
+    "start:server3": "node server3.js"
+  }
+}

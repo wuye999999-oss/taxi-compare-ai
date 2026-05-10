@@ -1,9 +1,9 @@
 // server-clean.js: clean, first-principles Jiabibi API runtime.
 // Real provider data only. Secrets must live in environment variables, never in GitHub.
 
-const http = require('http');
-const https = require('https');
-const crypto = require('crypto');
+import http from 'node:http';
+import https from 'node:https';
+import crypto from 'node:crypto';
 
 const PORT = process.env.PORT || 3000;
 
