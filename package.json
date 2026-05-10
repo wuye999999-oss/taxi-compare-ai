@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "start": "node server2.js",
+    "start:server3": "node server3.js"
   }
 }
