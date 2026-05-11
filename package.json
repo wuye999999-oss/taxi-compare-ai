@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "start": "node server-clean.js",
+    "start": "node server7.js",
     "start:server3": "node server3.js"
   }
 }
