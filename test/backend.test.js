@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { compare, createServer, providerStatuses, standardizeItem } from '../server2.js';
+import { compare, createServer, extractJdGoods, providerStatuses, standardizeItem } from '../server2.js';
 
 function getJson(server, path) {
   return new Promise((resolve, reject) => {
@@ -68,6 +68,61 @@ test('/api/compare returns canonical goods shape without fake taobao/douyin prod
 
   const expectedKeys = ['provider', 'title', 'price', 'originalPrice', 'shopName', 'shopType', 'brand', 'category', 'specText', 'volumeValue', 'volumeUnit', 'count', 'unitPrice', 'itemUrl', 'imageUrl', 'raw'];
   for (const item of data.goods) assert.deepEqual(Object.keys(item), expectedKeys);
+});
+
+
+test('extractJdGoods parses string result errors and prioritizes parsed data arrays', () => {
+  const raw = {
+    jd_union_open_goods_query_response: {
+      result: JSON.stringify({
+        code: 200,
+        message: 'ok',
+        data: [
+          { skuId: 'sku-1', skuName: '京东测试商品', priceInfo: { price: 12.3 } },
+        ],
+      }),
+    },
+  };
+
+  const extracted = extractJdGoods(raw);
+  assert.equal(extracted.raw_result_is_string, true);
+  assert.equal(extracted.code, 200);
+  assert.equal(extracted.data_present, true);
+  assert.equal(extracted.candidates.length, 1);
+  assert.equal(extracted.candidates[0].skuId, 'sku-1');
+});
+
+test('/api/search keeps other providers and surfaces JD business errors', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalEnv = {
+    JD_APP_KEY: process.env.JD_APP_KEY,
+    JD_APP_SECRET: process.env.JD_APP_SECRET,
+    JD_SEARCH_METHOD: process.env.JD_SEARCH_METHOD,
+  };
+  process.env.JD_APP_KEY = 'test-app-key';
+  process.env.JD_APP_SECRET = 'test-app-secret';
+  delete process.env.JD_SEARCH_METHOD;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    jd_union_open_goods_query_response: {
+      result: JSON.stringify({ code: '300', message: '京东测试错误', data: null }),
+    },
+  }), { status: 200, headers: { 'content-type': 'application/json' } });
+
+  try {
+    const data = await compare('小米充电宝');
+    assert.equal(data.q, '小米充电宝');
+    assert.ok(Array.isArray(data.goods));
+    assert.equal(data.provider_errors.jd.ok, false);
+    assert.equal(data.provider_errors.jd.code, '300');
+    assert.equal(data.provider_errors.jd.message, '京东测试错误');
+    assert.ok(data.providers.some(item => item.provider === 'pdd'));
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 });
 
 test('http routes keep /health, /api/providers/status and /api/compare', async () => {

@@ -248,6 +248,13 @@ function maskSensitiveValue(value) {
   return masked;
 }
 
+function maskPresence(value) {
+  const text = String(value || '').trim();
+  if (!text) return { present: false, masked: null };
+  if (text.length <= 4) return { present: true, masked: '*'.repeat(text.length) };
+  return { present: true, masked: `${'*'.repeat(Math.max(4, text.length - 4))}${text.slice(-4)}` };
+}
+
 function sanitizeJdRaw(value) {
   if (Array.isArray(value)) return value.map(sanitizeJdRaw);
   if (value && typeof value === 'object') {
@@ -330,6 +337,24 @@ function parseMaybeJson(value, meta) {
   }
 }
 
+function collectJdCandidatesFromContainer(list, seen, container) {
+  if (Array.isArray(container)) {
+    addArrayCandidates(list, seen, container);
+    return;
+  }
+  if (!container || typeof container !== 'object') return;
+  if (isGoodsCandidate(container)) {
+    addCandidate(list, seen, container);
+    return;
+  }
+  for (const key of ['data', 'list', 'goodsList', 'goods_list', 'goods', 'items', 'result']) {
+    if (list.length >= 20) break;
+    const value = container[key];
+    if (Array.isArray(value)) addArrayCandidates(list, seen, value);
+    else if (isGoodsCandidate(value)) addCandidate(list, seen, value);
+  }
+}
+
 export function extractJdGoods(raw = {}) {
   const meta = { raw_result_is_string: false, parse_error: null };
   const response = raw.jd_union_open_goods_query_response || raw.jdUnionOpenGoodsQueryResponse || raw;
@@ -339,26 +364,50 @@ export function extractJdGoods(raw = {}) {
   const candidates = [];
   const seen = new Set();
 
+  // JD union normally returns the real payload inside
+  // jd_union_open_goods_query_response.result. Prefer parsed_result.data first,
+  // then common nested containers before falling back to a recursive scan.
+  const priorityContainers = [
+    parsed?.data,
+    parsed?.data?.data,
+    parsed?.data?.list,
+    parsed?.data?.goodsList,
+    parsed?.data?.goods_list,
+    parsed?.data?.goods,
+    parsed?.data?.items,
+    parsed?.data?.result,
+  ];
+  for (const container of priorityContainers) {
+    if (candidates.length >= 20) break;
+    collectJdCandidatesFromContainer(candidates, seen, container);
+  }
+
   for (const root of roots) {
     const containers = [
       root?.data,
+      root?.data?.data,
       root?.data?.list,
+      root?.data?.goodsList,
+      root?.data?.goods_list,
       root?.data?.goods,
+      root?.data?.items,
       root?.data?.result,
       root?.result,
+      root?.result?.data,
       root?.result?.list,
       root?.goodsResp,
       root?.goodsResp?.goodsList,
       root?.queryResult,
       root?.queryResult?.goodsList,
       root?.goodsList,
+      root?.goods_list,
+      root?.items,
       root?.list,
       root?.goods,
     ];
     for (const container of containers) {
       if (candidates.length >= 20) break;
-      if (Array.isArray(container)) addArrayCandidates(candidates, seen, container);
-      else if (isGoodsCandidate(container)) addCandidate(candidates, seen, container);
+      collectJdCandidatesFromContainer(candidates, seen, container);
     }
   }
 
@@ -382,14 +431,40 @@ export function extractJdGoods(raw = {}) {
 
   const parsedCode = firstValue(parsed?.code, response?.code, raw?.code, raw?.error_response?.code);
   const parsedMessage = firstValue(parsed?.message, parsed?.msg, response?.message, response?.msg, raw?.message, raw?.msg, raw?.error_response?.zh_desc, raw?.error_response?.msg);
-  return { parsed, parse_error: meta.parse_error, raw_result_is_string: meta.raw_result_is_string, code: parsedCode, message: parsedMessage, candidates: candidates.slice(0, 20) };
+  return {
+    parsed,
+    parsed_result: parsed,
+    parse_error: meta.parse_error,
+    raw_result_is_string: meta.raw_result_is_string,
+    code: parsedCode,
+    message: parsedMessage,
+    data_present: parsed && typeof parsed === 'object' && parsed.data !== undefined && parsed.data !== null,
+    candidates: candidates.slice(0, 20),
+  };
+}
+
+function isJdSuccessCode(code) {
+  return String(code) === '200';
 }
 
 function isJdBusinessError(raw, extracted) {
   if (raw?.error_response) return true;
   const code = extracted.code;
   if (code === undefined || code === null || code === '') return false;
-  return !['0', '200', 'OK', 'ok', 'success'].includes(String(code));
+  return !isJdSuccessCode(code);
+}
+
+function jdErrorPayload(result) {
+  return {
+    ok: false,
+    code: result.code ?? result.error_code ?? null,
+    error_code: result.code ?? result.error_code ?? null,
+    message: result.message || '京东接口返回业务错误',
+    error: result.error || 'jd_api_error',
+    raw: result.raw,
+    parsed_result: result.parsed_result ?? result.parsed,
+    diagnostic: result.diagnostic,
+  };
 }
 
 function jdDiagnostic(raw, extracted, goodsList) {
@@ -414,7 +489,7 @@ export async function searchJd(query) {
 
   if (!jdUnionConfigured()) {
     const legacy = await fetchJdEnterprise(q);
-    return { ok: legacy.status === 'ok', provider: 'jd', platform: 'jd', status: legacy.status, total_count: legacy.items.length, goods_list: legacy.items, raw: sanitizeJdRaw(legacy.raw), diagnostic: { ...jdDiagnostic(legacy.raw || {}, { candidates: legacy.items }, legacy.items), reason: legacy.items.length ? undefined : 'jd_raw_ok_but_no_candidates' } };
+    return { ok: legacy.status === 'ok', provider: 'jd', platform: 'jd', status: legacy.status, total_count: legacy.items.length, goods_list: legacy.items, raw: sanitizeJdRaw(legacy.raw), error: legacy.status === 'ok' ? undefined : 'jd_enterprise_error', message: legacy.status === 'ok' ? undefined : '京东企业接口返回错误', code: legacy.status === 'ok' ? undefined : legacy.raw?.code, diagnostic: { ...jdDiagnostic(legacy.raw || {}, { candidates: legacy.items }, legacy.items), reason: legacy.items.length ? undefined : 'jd_raw_ok_but_no_candidates' } };
   }
 
   const raw = await jdRequest(JD_SEARCH_METHOD, { goodsReq: { keyword: q, pageIndex: 1, pageSize: 20 } });
@@ -424,11 +499,11 @@ export async function searchJd(query) {
   const diagnostic = jdDiagnostic(raw, extracted, goodsList);
 
   if (isJdBusinessError(raw, extracted)) {
-    return { ok: false, provider: 'jd', platform: 'jd', error: 'jd_api_error', message: extracted.message || '京东接口返回业务错误', code: extracted.code ?? raw?.error_response?.code ?? null, raw: safeRaw, parsed: extracted.parsed, candidates: sanitizeJdRaw(extracted.candidates), goods_list: goodsList, diagnostic };
+    return { ok: false, provider: 'jd', platform: 'jd', status: 'error', error: 'jd_api_error', message: extracted.message || '京东接口返回业务错误', code: extracted.code ?? raw?.error_response?.code ?? null, error_code: extracted.code ?? raw?.error_response?.code ?? null, raw: safeRaw, parsed: extracted.parsed, parsed_result: sanitizeJdRaw(extracted.parsed), candidates: sanitizeJdRaw(extracted.candidates), goods_list: goodsList, diagnostic };
   }
 
   if (goodsList.length === 0) diagnostic.reason = 'jd_raw_ok_but_no_candidates';
-  return { ok: true, provider: 'jd', platform: 'jd', status: 'ok', total_count: goodsList.length, raw: safeRaw, parsed: extracted.parsed, candidates: sanitizeJdRaw(extracted.candidates), goods_list: goodsList, diagnostic };
+  return { ok: true, provider: 'jd', platform: 'jd', status: 'ok', total_count: goodsList.length, raw: safeRaw, parsed: extracted.parsed, parsed_result: sanitizeJdRaw(extracted.parsed), candidates: sanitizeJdRaw(extracted.candidates), goods_list: goodsList, diagnostic };
 }
 
 async function fetchJdEnterprise(query) {
@@ -446,7 +521,7 @@ async function fetchJdEnterprise(query) {
 
 async function fetchJd(query) {
   const result = await searchJd(query);
-  return { provider: 'jd', status: result.ok ? result.status || 'ok' : 'error', items: result.goods_list || [], raw: result.raw, error: result.ok ? null : { error: result.error, message: result.message, code: result.code, raw: result.raw, diagnostic: result.diagnostic } };
+  return { provider: 'jd', status: result.ok ? result.status || 'ok' : 'error', items: result.goods_list || [], raw: result.raw, error: result.ok ? null : jdErrorPayload(result) };
 }
 
 export async function compare(query) {
@@ -519,32 +594,48 @@ export function createServer() {
       if (url.pathname === '/api/jd/debug') {
         const q = url.searchParams.get('q') || url.searchParams.get('keyword') || '';
         if (!q.trim()) return sendJson(res, 400, { error: 'missing q' });
+        const baseDebug = {
+          jd_configured: jdConfigured(),
+          JD_SEARCH_METHOD,
+          jd_search_method: JD_SEARCH_METHOD,
+          JD_SITE_ID: maskPresence(jdSiteId()),
+          jd_site_id: maskPresence(jdSiteId()),
+          jd_site_id_present: Boolean(jdSiteId()),
+          JD_POSITION_ID: { present: Boolean(jdPositionId()) },
+          jd_position_id_present: Boolean(jdPositionId()),
+        };
         if (!jdUnionConfigured()) {
-          const extracted = { candidates: [], raw_result_is_string: false, code: null, message: null, parse_error: null };
           return sendJson(res, 200, {
             ok: false,
             platform: 'jd',
+            ...baseDebug,
             error: 'jd_not_configured',
             raw: {},
-            parsed: null,
-            candidates: [],
-            goods_list: [],
-            diagnostic: jdDiagnostic({}, extracted, []),
+            parsed_result: null,
+            parsed_result_code: null,
+            parsed_result_message: null,
+            parsed_result_data_present: false,
+            goods_count: 0,
           });
         }
         const raw = await jdRequest(JD_SEARCH_METHOD, { goodsReq: { keyword: q.trim(), pageIndex: 1, pageSize: 20 } });
         const extracted = extractJdGoods(raw);
         const goodsList = extracted.candidates.map(item => normalizeJd(item, q)).filter(item => item.title).slice(0, 20);
-        const diagnostic = jdDiagnostic(raw, extracted, goodsList);
         return sendJson(res, 200, {
           ok: !isJdBusinessError(raw, extracted),
           platform: 'jd',
+          ...baseDebug,
           raw: sanitizeJdRaw(raw),
-          parsed: extracted.parsed,
+          parsed_result: sanitizeJdRaw(extracted.parsed),
+          parsed_result_code: extracted.code ?? null,
+          parsed_result_message: extracted.message ?? null,
+          parsed_result_data_present: Boolean(extracted.data_present),
+          parsed_result_data_is_array: Array.isArray(extracted.parsed?.data),
+          raw_result_is_string: Boolean(extracted.raw_result_is_string),
           parse_error: extracted.parse_error,
-          candidates: sanitizeJdRaw(extracted.candidates),
+          goods_count: goodsList.length,
+          candidates_count: extracted.candidates.length,
           goods_list: goodsList,
-          diagnostic,
         });
       }
       if (url.pathname === '/api/compare' || url.pathname === '/api/search') {
