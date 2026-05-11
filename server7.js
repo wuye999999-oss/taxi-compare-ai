@@ -1,3 +1,4 @@
+// server7 v7.7
 import crypto from 'node:crypto';
 import http from 'node:http';
 import { URL } from 'node:url';
@@ -683,13 +684,20 @@ function providerError(platform, error) {
 
 export async function compare(query) {
   const q = String(query || '').trim();
-  const entries = await Promise.allSettled([
-    searchPdd(q),
-    searchJd(q),
-    searchTb(q),
-    searchDouyin(q),
-  ]);
-  const platformOrder = ['pdd', 'jd', 'tb', 'douyin'];
+  const platformSearches = [
+    ['pdd', () => searchPdd(q)],
+    ['jd', () => searchJd(q)],
+    ['tb', () => searchTb(q)],
+    ['douyin', () => searchDouyin(q)],
+  ];
+  const entries = await Promise.all(platformSearches.map(async ([platform, search]) => {
+    try {
+      return { status: 'fulfilled', value: await search() };
+    } catch (error) {
+      return { status: 'rejected', reason: error, platform };
+    }
+  }));
+  const platformOrder = platformSearches.map(([platform]) => platform);
   const providers = {};
   const counts = {};
   const providerErrors = {};
@@ -745,6 +753,7 @@ export function createServer() {
         ok: true,
         service: 'jiabibi-compare-api',
         runtime: 'server7',
+        version: '7.7',
         jd_configured: jdConfigured(),
         jd_search_method: JD_SEARCH_METHOD,
         jd_position_id_present: Boolean(jdPositionId()),
@@ -793,14 +802,16 @@ export function createServer() {
         const result = await searchDouyin(q.trim());
         const goodsList = Array.isArray(result.goods_list) ? result.goods_list : [];
         return sendJson(res, 200, {
-          ok: Boolean(result.ok),
-          platform: 'douyin',
+          ok: true,
+          runtime: 'server7',
           q: q.trim(),
           self_check: douyinSelfCheck(),
-          result,
-          raw: result.raw,
+          result_ok: Boolean(result.ok),
+          code: result.raw?.code,
+          desc: result.raw?.desc || result.raw?.message,
           goods_count: goodsList.length,
           goods_preview: goodsList.slice(0, 3),
+          raw: result.raw,
         });
       }
       if (url.pathname === '/api/compare' || url.pathname === '/api/search') {
