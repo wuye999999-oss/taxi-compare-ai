@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import test from 'node:test';
-import { compare, createServer, providerStatuses, standardizeItem } from '../server2.js';
+import { compare, createServer, providerStatuses, signDouyin, standardizeItem } from '../server2.js';
 
 function getJson(server, path) {
   return new Promise((resolve, reject) => {
@@ -45,6 +46,28 @@ test('standardizeItem maps PDD/JD raw items to canonical fields for unit-price c
   assert.equal(jd.unitPrice, 1.25);
 });
 
+
+test('signDouyin signs the outer Pangolin CPS request fields only', () => {
+  const params = {
+    app_id: '5824464',
+    timestamp: 1778468230,
+    version: '1',
+    sign_type: 'MD5',
+    req_id: 'req-1',
+    data: '{"page":1,"page_size":10,"role_id":"333875","title":"小米充电宝","user_id":"333875"}',
+  };
+  const base = 'secret'
+    + 'app_id5824464'
+    + 'data{"page":1,"page_size":10,"role_id":"333875","title":"小米充电宝","user_id":"333875"}'
+    + 'req_idreq-1'
+    + 'sign_typeMD5'
+    + 'timestamp1778468230'
+    + 'version1'
+    + 'secret';
+  const expected = crypto.createHash('md5').update(base, 'utf8').digest('hex');
+  assert.equal(signDouyin(params, 'secret'), expected);
+});
+
 test('/api/providers/status preserves real integration status', () => {
   const statuses = providerStatuses();
   const jd = statuses.find(item => item.provider === 'jd');
@@ -54,7 +77,9 @@ test('/api/providers/status preserves real integration status', () => {
   assert.equal(jd.advancedApi, false);
   assert.match(jd.message, /不会伪造/);
   assert.equal(taobao.status, 'not_integrated');
-  assert.equal(douyin.status, 'not_integrated');
+  assert.equal(douyin.status, 'not_configured');
+  assert.equal(douyin.search, false);
+  assert.match(douyin.message, /不会伪造/);
 });
 
 test('/api/compare returns canonical goods shape without fake taobao/douyin products', async () => {
@@ -63,7 +88,7 @@ test('/api/compare returns canonical goods shape without fake taobao/douyin prod
   assert.ok(Array.isArray(data.providers));
   assert.ok(Array.isArray(data.goods));
   assert.ok(data.providers.some(item => item.provider === 'taobao' && item.status === 'not_integrated'));
-  assert.ok(data.providers.some(item => item.provider === 'douyin' && item.status === 'not_integrated'));
+  assert.ok(data.providers.some(item => item.provider === 'douyin' && item.status === 'not_configured'));
   assert.equal(data.goods.some(item => item.provider === 'taobao' || item.provider === 'douyin'), false);
 
   const expectedKeys = ['provider', 'title', 'price', 'originalPrice', 'shopName', 'shopType', 'brand', 'category', 'specText', 'volumeValue', 'volumeUnit', 'count', 'unitPrice', 'itemUrl', 'imageUrl', 'raw'];

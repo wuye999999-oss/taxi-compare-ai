@@ -131,6 +131,28 @@ function jdPositionId() {
   return env('JD_POSITION_ID') || env('JD_PID_POSITION_ID');
 }
 
+const DOUYIN_API_BASE = 'https://ecom.pangolin-sdk-toutiao.com';
+
+function douyinAppId() {
+  return env('DOUYIN_APP_ID') || env('PANGOLIN_APP_ID') || env('CSJ_APP_ID');
+}
+
+function douyinSecureKey() {
+  return env('DOUYIN_SECURE_KEY') || env('DOUYIN_SECURITY_KEY') || env('PANGOLIN_SECURE_KEY') || env('CSJ_SECURE_KEY');
+}
+
+function douyinUserId() {
+  return env('DOUYIN_USER_ID') || env('PANGOLIN_USER_ID') || env('CSJ_USER_ID');
+}
+
+function douyinRoleId() {
+  return env('DOUYIN_ROLE_ID') || env('PANGOLIN_ROLE_ID') || env('CSJ_ROLE_ID') || douyinUserId();
+}
+
+function douyinConfigured() {
+  return Boolean(douyinAppId() && douyinSecureKey() && douyinUserId() && douyinRoleId());
+}
+
 export function providerStatuses() {
   return [
     {
@@ -162,11 +184,13 @@ export function providerStatuses() {
     },
     {
       provider: 'douyin',
-      status: 'not_integrated',
-      configured: false,
-      search: false,
-      link: false,
-      message: '抖音暂未接入，只返回平台状态，不返回伪造商品。',
+      status: douyinConfigured() ? 'configured' : 'not_configured',
+      configured: douyinConfigured(),
+      search: douyinConfigured(),
+      link: douyinConfigured(),
+      mode: 'pangolin_cps',
+      endpoint: '/product/search',
+      message: douyinConfigured() ? '抖音/穿山甲 CPS 商品接口已按环境变量启用。' : '抖音/穿山甲 CPS 接口未配置，后端不会伪造商品。',
     },
   ];
 }
@@ -431,6 +455,129 @@ export async function searchJd(query) {
   return { ok: true, provider: 'jd', platform: 'jd', status: 'ok', total_count: goodsList.length, raw: safeRaw, parsed: extracted.parsed, candidates: sanitizeJdRaw(extracted.candidates), goods_list: goodsList, diagnostic };
 }
 
+
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+export function signDouyin(params, secureKey) {
+  const base = Object.keys(params)
+    .filter(key => key !== 'sign' && params[key] !== undefined && params[key] !== null && params[key] !== '')
+    .sort()
+    .map(key => `${key}${params[key]}`)
+    .join('');
+  return crypto.createHash('md5').update(`${secureKey}${base}${secureKey}`, 'utf8').digest('hex');
+}
+
+function douyinRequestBody(path, data, requestId = crypto.randomUUID(), timestamp = Math.floor(Date.now() / 1000)) {
+  const dataString = stableJson(data);
+  const body = {
+    app_id: douyinAppId(),
+    timestamp,
+    version: env('DOUYIN_API_VERSION') || '1',
+    sign_type: 'MD5',
+    req_id: requestId,
+    data: dataString,
+  };
+  body.sign = signDouyin(body, douyinSecureKey());
+  return { path, body, dataString };
+}
+
+function maskDouyinRaw(value) {
+  const secrets = [douyinSecureKey(), douyinAppId()].filter(Boolean);
+  if (Array.isArray(value)) return value.map(maskDouyinRaw);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, inner]) => {
+      if (['sign', 'secure_key', 'security_key'].includes(key)) return [key, '[REDACTED]'];
+      return [key, maskDouyinRaw(inner)];
+    }));
+  }
+  if (typeof value === 'string') {
+    let masked = value;
+    for (const secret of secrets) masked = masked.split(secret).join('[REDACTED]');
+    return masked;
+  }
+  return value;
+}
+
+function normalizeDouyin(item = {}, query = '') {
+  const finalFen = firstValue(item.coupon_price && asNumber(item.coupon_price) > 0 ? item.coupon_price : undefined, item.price);
+  const normalized = {
+    goods_name: firstValue(item.title, item.product_name, item.name),
+    coupon_price_yuan: yuanFromFen(finalFen),
+    market_price_yuan: yuanFromFen(item.price),
+    shop_name: item.shop_name,
+    goods_thumbnail_url: firstValue(item.cover, Array.isArray(item.imgs) ? item.imgs[0] : undefined),
+    goods_url: firstValue(item.detail_url, item.public_plan_detail_url, item.share_link),
+    brand_name: item.brand_name,
+    goods_id: item.product_id,
+  };
+  return standardizeItem('douyin', { ...item, ...normalized }, query);
+}
+
+function extractDouyinProducts(raw = {}) {
+  const data = raw?.data || raw?.result || raw;
+  const products = data?.products || data?.product_list || raw?.products || [];
+  return Array.isArray(products) ? products : [];
+}
+
+async function douyinRequest(path, data) {
+  if (!douyinConfigured()) throw Object.assign(new Error('DOUYIN_APP_ID/DOUYIN_SECURE_KEY/DOUYIN_USER_ID/DOUYIN_ROLE_ID not configured'), { provider: 'douyin' });
+  const endpoint = `${env('DOUYIN_API_BASE') || DOUYIN_API_BASE}${path}`;
+  const { body } = douyinRequestBody(path, data);
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const text = await response.text();
+  let raw;
+  try {
+    raw = JSON.parse(text);
+  } catch (error) {
+    raw = { parse_error: error.message, body: text };
+  }
+  return { response, raw, request: maskDouyinRaw(body) };
+}
+
+async function searchDouyin(query) {
+  if (!douyinConfigured()) return { ok: true, provider: 'douyin', platform: 'douyin', status: 'not_configured', total_count: 0, goods_list: [] };
+  const data = {
+    user_id: douyinUserId(),
+    role_id: douyinRoleId(),
+    page: 1,
+    page_size: Math.min(Math.max(Number(env('DOUYIN_PAGE_SIZE') || 20), 1), 20),
+    title: query,
+  };
+  const { response, raw, request } = await douyinRequest('/product/search', data);
+  const products = extractDouyinProducts(raw);
+  const goodsList = products.map(item => normalizeDouyin(item, query)).filter(item => item.title).slice(0, 20);
+  const code = raw?.code;
+  const ok = response.ok && (code === undefined || code === null || Number(code) === 0);
+  return {
+    ok,
+    provider: 'douyin',
+    platform: 'douyin',
+    status: ok ? 'ok' : 'error',
+    total_count: raw?.data?.total ?? products.length,
+    goods_list: goodsList,
+    raw: maskDouyinRaw(raw),
+    request,
+    error: ok ? null : 'douyin_api_error',
+    message: ok ? null : raw?.desc || raw?.message || '抖音接口返回业务错误',
+    code: ok ? null : code ?? null,
+  };
+}
+
+async function fetchDouyin(query) {
+  const result = await searchDouyin(query);
+  return { provider: 'douyin', status: result.ok ? result.status || 'ok' : 'error', items: result.goods_list || [], raw: result.raw, error: result.ok ? null : { error: result.error, message: result.message, code: result.code, raw: result.raw, request: result.request } };
+}
+
 async function fetchJdEnterprise(query) {
   if (!jdConfigured()) return { provider: 'jd', status: 'not_configured', items: [] };
   const url = new URL(env('JD_SEARCH_API_URL'));
@@ -452,7 +599,7 @@ async function fetchJd(query) {
 export async function compare(query) {
   const q = String(query || '').trim();
   const statuses = providerStatuses();
-  const providerResults = await Promise.allSettled([fetchPdd(q), fetchJd(q)]);
+  const providerResults = await Promise.allSettled([fetchPdd(q), fetchJd(q), fetchDouyin(q)]);
   const goods = [];
   const providerErrors = {};
   const providers = statuses.map(status => ({ ...status }));
@@ -514,6 +661,8 @@ export function createServer() {
         jd_position_id_present: Boolean(jdPositionId()),
         jd_site_id_present: Boolean(jdSiteId()),
         jd_debug_endpoint: '/api/jd/debug?q=小米充电宝',
+        douyin_configured: douyinConfigured(),
+        douyin_debug_endpoint: '/api/douyin/debug?q=小米充电宝',
       });
       if (url.pathname === '/api/providers/status') return sendJson(res, 200, { providers: providerStatuses() });
       if (url.pathname === '/api/jd/debug') {
@@ -546,6 +695,12 @@ export function createServer() {
           goods_list: goodsList,
           diagnostic,
         });
+      }
+      if (url.pathname === '/api/douyin/debug') {
+        const q = url.searchParams.get('q') || url.searchParams.get('keyword') || '';
+        if (!q.trim()) return sendJson(res, 400, { error: 'missing q' });
+        const result = await searchDouyin(q.trim());
+        return sendJson(res, result.ok ? 200 : 502, result);
       }
       if (url.pathname === '/api/compare' || url.pathname === '/api/search') {
         const q = url.searchParams.get('q') || url.searchParams.get('keyword') || '';
